@@ -1,9 +1,17 @@
 default::
 	echo "make {clean,sim,build,program,minicom}"
+
+# PHYSICAL DESIGN TARGETS
 build::
-	cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 20 1000 40 25 ;
+	# build fpga bit file from verilog source using ./bin/build.tcl
+	# -tclargs board clkdiv init gridx gridy gridz {STRADDLE|MIDDLE}
+	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 20 1000 40 25 MIDDLE ;
+	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 50 900 30 30 STRADDLE ;
+	cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 50 1200 40 30 STRADDLE ;
+	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vc707 div2 20 600 40 15 MIDDLE ;
 program::
 	cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vcu118 $(BIT) ;
+	#cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vc707 $(BIT) ;
 
 
 # SIMULATION TARGETS

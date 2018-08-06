@@ -17,13 +17,16 @@ reg [INIT*INIT+32-1:0] life_data;
 // datapath
 genvar i,j;
 integer k,n,m;
+reg [4:0] a;
 
 // init mux
-reg [4:0] a;
+reg init;
 reg [INIT*INIT-1:0] rng_init;
 reg [INIT*INIT-1:0] best_rng;
-reg init;
 reg [GRIDX*GRIDY-1:0] initd;
+// MIDDLE centers the init patch in the middle GRIDZ slice, GRIDZ should be an odd number
+// STRADDLE centers the init patch across the middle two GRIDZ slices, GRIDZ should be an even number
+`ifdef MIDDLE
 always @(a or rng_init) begin
     initd = 'b0;
     if (a == (GRIDZ/2)) begin
@@ -34,6 +37,26 @@ always @(a or rng_init) begin
         end
     end
 end
+`endif
+`ifdef STRADDLE
+always @(a or rng_init) begin
+    initd = 'b0;
+    if (a == ((GRIDZ/2)-1)) begin // bottom half
+        for (n=0; n < INIT/2; n=n+1) begin // y
+            for (m=0; m < INIT; m=m+1) begin // x
+                initd[((GRIDY-INIT/2)+n)*GRIDX + ((GRIDX/2-INIT/2)+m)] = rng_init[n*INIT+m];
+            end
+        end
+    end
+    if (a == (GRIDZ/2)) begin // top half
+        for (n=0; n < INIT/2; n=n+1) begin // y
+            for (m=0; m < INIT; m=m+1) begin // x
+                initd[n*GRIDX + ((GRIDX/2-INIT/2)+m)] = rng_init[(n+INIT/2)*INIT+m];
+            end
+        end
+    end
+end
+`endif
 
 // main grid
 wire [GRIDX*GRIDY-1:0] d;

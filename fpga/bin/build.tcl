@@ -5,10 +5,12 @@ set init [lindex $argv 2]
 set gridx [lindex $argv 3]
 set gridy [lindex $argv 4]
 set gridz [lindex $argv 5]
+set initd [lindex $argv 6]
 
-# set PERIOD parameter for 115200 baud
+# set PERIOD parameter for 115200 baud, period is the number of clocks per half symbol time
 if {$board=="vc707" && $clkdiv=="div2"} {set period 434}
 if {$board=="vc707" && $clkdiv=="div4"} {set period 217}
+if {$board=="vcu118" && $clkdiv=="div2"} {set period 542}
 if {$board=="vcu118" && $clkdiv=="div4"} {set period 271}
 
 # read verilog source
@@ -31,7 +33,7 @@ set_param synth.elaboration.rodinMoreOptions "rt::set_parameter max_loop_limit 2
 set_param project.hsv.draftModeDefault only
 set_property source_mgmt_mode DisplayOnly [current_project]
 
-synth_design -top top -part $part -generic INIT=$init -generic GRIDX=$gridx -generic GRIDY=$gridy -generic GRIDZ=$gridz -generic PERIOD=$period
+synth_design -top top -part $part -generic INIT=$init -generic GRIDX=$gridx -generic GRIDY=$gridy -generic GRIDZ=$gridz -generic PERIOD=$period -verilog_define $initd
 
 set_property ALLOW_COMBINATORIAL_LOOPS TRUE [get_nets rng_inst/*]
 set_property SEVERITY {Warning}  [get_drc_checks LUTLP-1]
@@ -61,16 +63,20 @@ if {$board=="vcu118"} {
 }
 
 # p&r
-opt_design
-place_design
-phys_opt_design
-route_design
+opt_design -directive Explore
+place_design -directive ExtraTimingOpt
+phys_opt_design -directive AggressiveExplore
+phys_opt_design -directive AggressiveFanoutOpt
+#route_design -directive MoreGlobalIterations
+route_design -directive Explore
+phys_opt_design -directive Explore
+#phys_opt_design -directive AggressiveFanoutOpt
 report_route_status
 report_timing_summary
 report_timing -max_paths 100 -unique_pins -path_type full
 report_utilization
 
 set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
-write_bitstream -force ${board}_${clkdiv}_${init}_${gridx}_${gridy}_${gridz}.bit
+write_bitstream -force ${board}_${clkdiv}_${init}_${gridx}_${gridy}_${gridz}_${initd}.bit
 
 exit

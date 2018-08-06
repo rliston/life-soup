@@ -1,6 +1,6 @@
 default:
-	echo "make r01"
-vc707:
-	python ./bin/life.py --num_init 1000000 --nocheck --rngmode 00 --dir ./lif/r00/ --serial /dev/ttyUSB0
-vcu118:
-	python ./bin/life.py --num_init 1000000 --nocheck --rngmode 00 --dir ./lif/r00.2/ --serial /dev/ttyUSB4
+	echo "make {i20,i50}"
+i20:
+	python ./bin/life.py --num_init 10000000 --nocheck --rngmode 00 --dir ./lif/r00i20/ --serial /dev/ttyUSB0
+i50:
+	python ./bin/life.py --num_init 10000000 --nocheck --rngmode 00 --dir ./lif/r00i50/ --serial /dev/ttyUSB4 --size 1200 --init 50
