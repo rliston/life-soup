@@ -7,13 +7,19 @@ build::
 	# -tclargs board clkdiv init gridx gridy gridz {STRADDLE|MIDDLE}
 	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 20 1000 40 25 MIDDLE ;
 	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 50 900 30 30 STRADDLE ;
+	cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vc707 div2 20 750 30 25 MIDDLE ;
 	# THE FOLLOWING ARE RUNNING
-	cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 50 1200 40 30 STRADDLE ;
+	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vcu118 div4 50 1200 40 30 STRADDLE ;
 	#cd ./build ; vivado -stack 10000 -log build.log -mode tcl -source ../bin/build.tcl -tclargs vc707 div2 20 600 40 15 MIDDLE ;
 program::
 	# make program BIT=vcu118_div4_50_1200_40_30_STRADDLE.bit
 	cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vcu118 $(BIT) ;
 	#cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vc707 $(BIT) ;
+progvc707::
+	#cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vc707 vc707_div2_20_600_40_15_MIDDLE.bit ;
+	cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vc707 vc707_div2_20_750_30_25_MIDDLE.bit ;
+progvcu118::
+	cd ./build ; vivado -log program.log -mode tcl -source ../bin/program.tcl -tclargs vcu118 vcu118_div4_50_1200_40_30_STRADDLE.bit ;
 
 
 # SIMULATION TARGETS
