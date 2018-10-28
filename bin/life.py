@@ -92,7 +92,7 @@ if ser.is_open:
                 #fn = args.dir+'/F'+'%05d'%final+'-L'+'%05d'%step_count+'-A'+'%09d'%boundact+'-R'+args.rngmode+'-T'+time.strftime("%Y_%m%d_%H%M_%S")
                 fn = args.dir+'L'+'%05d'%step_count+'-S'+'%09d'%args.num_init+'-R'+args.rngmode+'-T'+time.strftime("%Y_%m%d_%H%M_%S")
                 write_lif(winit,fn+'.lif',args)
-                print 'step_count {:9d} time {} rng {} init0 {:4d} init1 {:4d} fn {}'.format(step_count,time.strftime("%Y_%m%d_%H%M_%S"),args.rngmode,init.count('0'),init.count('1'),fn+'.lif')
+                print 'step_count {:9,d} time {} rng {} init0 {:4d} init1 {:4d} fn {}'.format(step_count,time.strftime("%Y_%m%d_%H%M_%S"),args.rngmode,init.count('0'),init.count('1'),fn+'.lif')
             else:
                 print 'error: response not L'
     except Exception, e:
