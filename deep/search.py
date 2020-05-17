@@ -7,6 +7,7 @@ import time
 np.set_printoptions(linewidth=250)
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--n', help='number of soups', default=1000000, type=int)
+parser.add_argument('--interval', help='save data file every interval soups', default=1000, type=int)
 parser.add_argument('--npz', help='output npz data file', default='meth.npz')
 parser.add_argument('--verbose', default=False, action='store_true')
 parser.add_argument('--debug', default=False, action='store_true')
@@ -42,7 +43,7 @@ while t < args.n:
         if h.population == last:
             l[t] = i
             t += 1
-            if t%1000==0:
+            if t%args.interval==0:
                 np.savez(args.npz,pattern=p[0:t],lifespan=l[0:t])
                 b = np.arange(0,120,10) # 0 to 10K+ in 1K steps
                 h = np.histogram(np.clip(l[0:t],b[0],b[-1]),bins=b)[0] # put >10K in last bin
