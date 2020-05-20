@@ -1,64 +1,37 @@
-# CUDA_VISIBLE_DEVICES='0' python gan.py
+# CUDA_VISIBLE_DEVICES='0' unbuffer python train.py |& tee default.log
+# TODO
+# 1. use tf.Model class, tf.saved_model, output logits in order to fine tune pretrained model
+# 2. in training loop, check if queue.empty() or np.mean(queue.qsize()) ... for performance monitoring
+
 import argparse
 import struct
 import time
-import numpy as np
-print('numpy ' + np.__version__)
-#np.set_printoptions(threshold='nan')
-np.set_printoptions(linewidth=250)
-np.set_printoptions(formatter={'float': '{:12.8f}'.format, 'int': '{:4d}'.format})
-import tensorflow as tf
-print('tensorflow ' + tf.__version__)
-import cv2
-print('cv2 ' + cv2.__version__)
+import random
+import numpy as np ; print('numpy ' + np.__version__)
+import tensorflow as tf ; print('tensorflow ' + tf.__version__)
+from multiprocessing import Process, Queue
+import lifelib ; print('lifelib',lifelib.__version__)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--npz', nargs = '*', dest = 'npz', help = 'npz data files', default = argparse.SUPPRESS)
-parser.add_argument('--split', help='train/test ratio', default=0.8, type=float)
-parser.add_argument('--net', help='network arch', default='default')
-parser.add_argument('--layers', help='number of layers', default=5, type=int)
-parser.add_argument('--units', help='number of units/layer', default=1000, type=int)
-parser.add_argument('--filters', help='number of filters/layer', default=256, type=int)
-parser.add_argument('--lr', help='learning rate', default=0.00001, type=float)
-parser.add_argument('--batch', help='batch size', default=1000, type=int)
-parser.add_argument('--epochs', help='training epochs', default=10000000, type=int)
+parser.add_argument('--net', help='network arch', default='dense')
+parser.add_argument('--layers', help='number of layers', default=9, type=int)
+parser.add_argument('--units', help='number of units/layer (dense)', default=3000, type=int)
+parser.add_argument('--filters', help='number of filters/layer (conv)', default=256, type=int)
+parser.add_argument('--lr', help='learning rate', default=0.000001, type=float)
+parser.add_argument('--pow', help='label weight power exponent', default=0, type=float)
+parser.add_argument('--threads', help='number of threads for generating soups', default=20, type=int)
+parser.add_argument('--batch', help='batch size', default=30, type=int)
+parser.add_argument('--bpe', help='batches per epoch', default=100000, type=int)
+parser.add_argument('--epochs', help='training epochs', default=1000000000, type=int)
 parser.add_argument('--model', default='default.proto')
 parser.add_argument('--debug', default=False, action='store_true')
 args = parser.parse_args()
 print(args)
 
-# load meth.npz files from search.py
-d=[]
-l=[]
-for f in args.npz:
-    print('loading',f)
-    npz = np.load(f)
-    d.extend(npz['pattern'])
-    l.extend(npz['lifespan'])
-d = np.array(d,dtype=np.float32)
-l = np.array(l,dtype=np.int32)
-d = np.expand_dims(d,axis=-1)
-print('d.shape',d.shape,'l.shape',l.shape,'l.min()',l.min(),'l.max()',l.max())
+np.set_printoptions(linewidth=250)
+np.set_printoptions(formatter={'float': '{:12.8f}'.format, 'int': '{:4d}'.format})
 
-# add symmetries
-#d = np.concatenate([p,np.flip(p,axis=1),np.flip(p,axis=2),np.rot90(p,k=1,axes=(1,2)),np.rot90(p,k=2,axes=(1,2)),np.rot90(p,k=3,axes=(1,2))],axis=0)
-#l = np.concatenate([l,l,l,l,l,l],axis=0)
-#print('d.shape',d.shape,'l.shape',l.shape)
-
-# split train,test
-rng = np.random.get_state()
-np.random.shuffle(d)
-np.random.set_state(rng)
-np.random.shuffle(l)
-split = int(len(d)*args.split)
-td = d[split:]
-tl = l[split:]
-d = d[0:split]
-l = l[0:split]
-print('d.shape',d.shape,'l.shape',l.shape)
-print('td.shape',td.shape,'tl.shape',tl.shape)
-
-def dnet_default(args,x,reuse=None):
+def dnet_dense(args,x,reuse=None):
     print('discriminator network, reuse',reuse)
     with tf.variable_scope('d',reuse=reuse):
         d = tf.identity(x) ; print(d)
@@ -85,7 +58,7 @@ x = tf.placeholder(tf.float32, [None,16,16,1],name='x') ; print(x)
 y = tf.placeholder(tf.int32,(None),name='y') ; print(y) # [batch] label
 
 logits = locals()['dnet_'+args.net](args,x)
-loss = tf.losses.sparse_softmax_cross_entropy(labels=y,logits=logits) ; print(loss)
+loss = tf.losses.sparse_softmax_cross_entropy(labels=y,logits=logits,weights=tf.pow(tf.cast(y,tf.float32),tf.constant(args.pow))) ; print(loss)
 pred = tf.nn.softmax(logits,name='pred') ; print(pred)
 
 #opt = tf.train.GradientDescentOptimizer(learning_rate=args.lr)
@@ -95,46 +68,60 @@ train = opt.apply_gradients(grads)
 norm = tf.global_norm([i[0] for i in grads])
 init = tf.variables_initializer(tf.global_variables())
 
-# random symmetry = [p,np.flip(p,axis=1),np.flip(p,axis=2),np.rot90(p,k=1,axes=(1,2)),np.rot90(p,k=2,axes=(1,2)),np.rot90(p,k=3,axes=(1,2))]
-def permute(d):
-    r = np.random.randint(6)
-    if r==0:
-        return(d)
-    if r==1:
-        return(np.flip(d,axis=1))
-    if r==2:
-        return(np.flip(d,axis=2))
-    if r==3:
-        return(np.rot90(d,k=1,axes=(1,2)))
-    if r==4:
-        return(np.rot90(d,k=2,axes=(1,2)))
-    if r==5:
-        return(np.rot90(d,k=3,axes=(1,2)))
-        
-print('d.shape',d.shape)
+def search(args,q,k): # generate args.batch size batches of data and push to queue
+    sess = lifelib.load_rules("b3s23")
+    d = np.zeros([args.batch,16,16,1],dtype=np.uint8) # pattern
+    l = np.zeros([args.batch],dtype=np.uint32) # lifespan
+    while True:
+        t=0 # total soups in batch
+        lt = sess.lifetree(memory=100000)
+        while t < args.batch:
+            # generate random 16x16 soup
+            rle=''
+            for i in range(16):
+                for j in range(16):
+                    b = random.choice([0,1])
+                    d[t,i,j,0] = b
+                    rle += ['b','o'][b]
+                rle += '$'
+            rle = rle[:-1] + '!'
+            h = lt.pattern(rle)
+
+            # run soup until population is stable
+            last=None
+            for i in range(1000):
+                h = h.advance(100)
+                if h.population == last:
+                    l[t] = i
+                    t += 1
+                    break
+                last = h.population
+        q.put((d.copy(),l.copy()))
+
+# IPC
+q = Queue(maxsize=1000)
+for k in range(args.threads):
+    p = Process(target=search,args=(args,q,k,))
+    p.daemon = True
+    p.start()
+
 with tf.Session() as sess:
     sess.run(init)
-    for i in range(args.epochs):
+    for i in range(1,args.epochs):
         t0 = time.time()
-        rng_state = np.random.get_state()
-        np.random.shuffle(d)
-        np.random.set_state(rng_state)
-        np.random.shuffle(l)
 
         # TRAIN
         la=[]
         ga=[]
-        for j in range(0,d.shape[0],args.batch):
-            _,loss_,grad_ = sess.run([train,loss,norm],feed_dict={x:permute(d[j:j+args.batch]),y:l[j:j+args.batch]})
+        for j in range(args.bpe):
+            (d,l) = q.get(block=True,timeout=None)
+            # TODO add symmetries?
+            #d = np.concatenate([d,np.flip(d,axis=1),np.flip(d,axis=2),np.rot90(d,k=1,axes=(1,2)),np.rot90(d,k=2,axes=(1,2)),np.rot90(d,k=3,axes=(1,2))],axis=0)
+            #l = np.concatenate([l,l,l,l,l,l],axis=0)
+            _,loss_,grad_ = sess.run([train,loss,norm],feed_dict={x:d,y:l})
             la.append(loss_)
             ga.append(grad_)
 
-        # TEST
-        aa=[]
-        for j in range(0,td.shape[0],args.batch):
-            p = sess.run(pred, feed_dict={x:permute(td[j:j+args.batch])})
-            aa.append(np.mean(np.argmax(p, axis=1) == tl[j:j+args.batch]))
-        
         tf.train.write_graph(tf.graph_util.convert_variables_to_constants(sess, tf.get_default_graph().as_graph_def(), ['pred']), '.', args.model, as_text=False)
         t1 = time.time()
-        print('epoch {:9d} t1 {:6.2f} loss {:12.8f} grad {:12.8f} accuracy {:12.8f}'.format(i,t1-t0,np.mean(la),np.mean(ga),np.mean(aa)))
+        print('trainops {:9d} t1 {:6.2f} loss {:12.8f} grad {:12.8f}'.format(i*args.bpe,t1-t0,np.mean(la),np.mean(ga)))

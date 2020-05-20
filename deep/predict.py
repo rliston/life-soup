@@ -70,7 +70,8 @@ for k in range(args.n):
         last = h.population
     
     # (rle,pred,prob,life)
-    print(rle,'life',life,'pred',pred,'prob',prob)
+    print('life {:6d} pred {:6d} prob {:12.8f} rle {}'.format(life,pred,prob,rle))
+    #print(rle,'life',life,'pred',pred,'prob',prob)
     r.append((rle,life,pred,prob))
 
 #            if i > args.m:
