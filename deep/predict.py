@@ -37,7 +37,7 @@ def stabilize(pat):
         pop = pat.population
         pat = pat.advance(100)
         if pat.population == pop:
-            pat = pat.advance(1)
+            pat = pat.advance(2)
             if pat.population == pop:
                 pat = pat.advance(1)
                 if pat.population == pop:
