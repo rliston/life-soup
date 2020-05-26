@@ -32,6 +32,44 @@ parser.add_argument('--n', help='number of soups', default=10, type=int)
 args = parser.parse_args()
 print(args)
 
+def stabilize(pat):
+    depth=0
+    prevpop=0
+    currpop=0
+    period=12
+    security=15
+    life=0
+    for i in range(1000):
+        #print('i',i,'depth',depth,'prevpop',prevpop,'currpop',currpop,'period',period,'security',security,'life',life)
+        if (i == 40):
+            security = 20
+        if (i == 60):
+            security = 25
+        if (i == 80):
+            security = 30
+
+        if (i == 400):
+            period = 18
+        if (i == 500):
+            period = 24
+        if (i == 600):
+            period = 30
+
+        pat = pat.advance(period)
+        currpop = pat.population
+        life += period
+        if (currpop == prevpop):
+            depth += 1
+        else:
+            depth = 0
+            period ^= 4 # exclusive or
+        
+        prevpop = currpop
+        if (depth == security):
+            return life # Population is periodic.
+
+    return 0
+
 # load model
 sess = tf.Session()
 with open(args.model, 'rb') as f:
@@ -55,22 +93,24 @@ for k in range(args.n):
     # run deep model
     pdf = sess.run('foo/pred:0', feed_dict={'foo/x:0':p.reshape([1,16,16,1])})[0]
     pred = np.argmax(pdf)
+    #print('pred',pred)
     prob = pdf[pred]
 
     # run soup until population is stable
     lt = lsess.lifetree(memory=100000)
-    h = lt.pattern(rle)
-    last=None
-    life=None
-    for i in range(1000):
-        h = h.advance(100)
-        if h.population == last:
-            life=i
-            break
-        last = h.population
+
+#    h2 = lt.pattern(rle)
+#    for ii in range(100):
+#        h2 = h2.advance(100)
+#        y = h2.oscar(eventual_oscillator=True,verbose=False)
+#        print('ii',ii,'oscar',y,'pop',h2.population)
+#    exit()
     
+    h = lt.pattern(rle)
+    life = stabilize(h)
+
     # (rle,pred,prob,life)
-    print('life {:6d} pred {:6d} prob {:12.8f} rle {}'.format(life,pred,prob,rle))
+    print('life {:6d} pred {:6d} prob {:12.8f} rle {}'.format(life,pred**2,prob,rle))
     #print(rle,'life',life,'pred',pred,'prob',prob)
     r.append((rle,life,pred,prob))
 
