@@ -33,42 +33,17 @@ args = parser.parse_args()
 print(args)
 
 def stabilize(pat):
-    depth=0
-    prevpop=0
-    currpop=0
-    period=12
-    security=15
-    life=0
     for i in range(1000):
-        #print('i',i,'depth',depth,'prevpop',prevpop,'currpop',currpop,'period',period,'security',security,'life',life)
-        if (i == 40):
-            security = 20
-        if (i == 60):
-            security = 25
-        if (i == 80):
-            security = 30
+        pop = pat.population
+        pat = pat.advance(100)
+        if pat.population == pop:
+            pat = pat.advance(1)
+            if pat.population == pop:
+                pat = pat.advance(1)
+                if pat.population == pop:
+                    return i*100
+    return -1
 
-        if (i == 400):
-            period = 18
-        if (i == 500):
-            period = 24
-        if (i == 600):
-            period = 30
-
-        pat = pat.advance(period)
-        currpop = pat.population
-        life += period
-        if (currpop == prevpop):
-            depth += 1
-        else:
-            depth = 0
-            period ^= 4 # exclusive or
-        
-        prevpop = currpop
-        if (depth == security):
-            return life # Population is periodic.
-
-    return 0
 
 # load model
 sess = tf.Session()

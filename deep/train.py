@@ -69,42 +69,16 @@ norm = tf.global_norm([i[0] for i in grads])
 init = tf.variables_initializer(tf.global_variables())
 
 def stabilize(pat):
-    depth=0
-    prevpop=0
-    currpop=0
-    period=12
-    security=15
-    life=0
     for i in range(1000):
-        #print('i',i,'depth',depth,'prevpop',prevpop,'currpop',currpop,'period',period,'security',security,'life',life)
-        if (i == 40):
-            security = 20
-        if (i == 60):
-            security = 25
-        if (i == 80):
-            security = 30
-
-        if (i == 400):
-            period = 18
-        if (i == 500):
-            period = 24
-        if (i == 600):
-            period = 30
-
-        pat = pat.advance(period)
-        currpop = pat.population
-        life += period
-        if (currpop == prevpop):
-            depth += 1
-        else:
-            depth = 0
-            period ^= 4
-        
-        prevpop = currpop
-        if (depth == security):
-            return life # Population is periodic.
-
-    return 0
+        pop = pat.population
+        pat = pat.advance(100)
+        if pat.population == pop:
+            pat = pat.advance(1)
+            if pat.population == pop:
+                pat = pat.advance(1)
+                if pat.population == pop:
+                    return i*100
+    return -1
 
 def search(args,q,k): # generate args.batch size batches of data and push to queue
     sess = lifelib.load_rules("b3s23")
@@ -127,6 +101,8 @@ def search(args,q,k): # generate args.batch size batches of data and push to que
 
             # run soup until population is stable
             life = stabilize(h)
+            if life<0: # didn't stabilize after 100K steps
+                continue
             l[t] = min(199,int(np.sqrt(life))) # label = sqrt(lifespan), cap at 199^2=39601
             t+=1
         # generated a batch of (pattern,lifespan)
