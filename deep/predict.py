@@ -12,6 +12,8 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument('--model', default='default.proto')
 #parser.add_argument('--npy', help='npy data file from merge.py', default='default.npy')
 parser.add_argument('--n', help='number of soups', default=10, type=int)
+parser.add_argument('--size',help='input size (16 for dense, 32 for conv)',default=16,type=int)
+parser.add_argument('--depth',help='input depth (1 for dense, 9 for conv)',default=1,type=int)
 #parser.add_argument('--shuffle', default=False, action='store_true') # output logging messages to stderr
 #parser.add_argument('--freq',help='uhd center frequency',default=5180000000,type=float)
 #parser.add_argument('--rx_gain',help='normalized uhd rx gain',default=1.0,type=float)
@@ -32,6 +34,30 @@ parser.add_argument('--n', help='number of soups', default=10, type=int)
 args = parser.parse_args()
 print(args)
 
+def gensoup(lt,size=16,depth=1):
+    mat2pat = lambda M : lt.pattern('$'.join([''.join(['bo'[y] for y in x]) for x in M.tolist()]) + '!')
+    coords = np.array([[x,y] for x in range(size) for y in range(size)],dtype=np.int64)
+
+    d = np.zeros([size,size,depth],dtype=np.uint8) # pattern
+    o = depth-1
+    s = np.random.randint(2,size=(16,16)) # layer 0 = centered random 16x16 soup
+
+    rle=''
+    for i in range(16):
+        for j in range(16):
+            rle += ['b','o'][s[i,j]]
+        rle += '$'
+    rle = rle[:-1] + '!'
+
+    d[o:o+16,o:o+16,0] = s # layer 0 = centered random 16x16 soup
+    p = mat2pat(d[:,:,0])
+    #rle = p.rle_string().replace('\n', ' ') # save initial soup
+    for k in range(1,depth):
+        p = p.advance(1)
+        v = p[coords].reshape((size,size),order='F')
+        d[:,:,k] = v
+    return p,d,rle
+
 def stabilize(pat):
     for i in range(1000):
         pop = pat.population
@@ -39,7 +65,7 @@ def stabilize(pat):
         if pat.population == pop:
             pat = pat.advance(2)
             if pat.population == pop:
-                pat = pat.advance(1)
+                pat = pat.advance(2)
                 if pat.population == pop:
                     return i*100
     return -1
@@ -55,57 +81,16 @@ with open(args.model, 'rb') as f:
 r = []
 lsess = lifelib.load_rules("b3s23")
 for k in range(args.n):
-    # generate random 16x16 soup
-    p = np.zeros([16,16],dtype=np.uint8) # pattern
-    rle=''
-    for i in range(16):
-        for j in range(16):
-            p[i,j] = random.choice([0,1])
-            rle += ['b','o'][p[i,j]]
-        rle += '$'
-    rle = rle[:-1] + '!'
+    # generate random soup
+    lt = lsess.lifetree(memory=100000)
+    p,d,rle = gensoup(lt,args.size,args.depth)
+    life = stabilize(p)
 
     # run deep model
-    pdf = sess.run('foo/pred:0', feed_dict={'foo/x:0':p.reshape([1,16,16,1])})[0]
+    pdf = sess.run('foo/pred:0', feed_dict={'foo/x:0':[d]})[0]
     pred = np.argmax(pdf)
-    #print('pred',pred)
     prob = pdf[pred]
-
-    # run soup until population is stable
-    lt = lsess.lifetree(memory=100000)
-
-#    h2 = lt.pattern(rle)
-#    for ii in range(100):
-#        h2 = h2.advance(100)
-#        y = h2.oscar(eventual_oscillator=True,verbose=False)
-#        print('ii',ii,'oscar',y,'pop',h2.population)
-#    exit()
-    
-    h = lt.pattern(rle)
-    life = stabilize(h)
 
     # (rle,pred,prob,life)
     print('life {:6d} pred {:6d} prob {:12.8f} rle {}'.format(life,pred**2,prob,rle))
-    #print(rle,'life',life,'pred',pred,'prob',prob)
     r.append((rle,life,pred,prob))
-
-#            if i > args.m:
-#                if args.verbose:
-#                    print('k',k,'l',i,'pop',h.population,'rle',rle)
-#                l = i
-#                k += 1
-#                if k%1000==0:
-#                    np.savez(args.npz,pattern=p[0:k],lifespan=l[0:k])
-#                    b = np.arange(0,120,10) # 0 to 10K+ in 1K steps
-#                    h = np.histogram(np.clip(l[0:k],b[0],b[-1]),bins=b)[0]
-#                    print('k {:9d} tot {:9d} ({:6.4f}) progress {:6.4f} t0 {:8.2f} t1 {:8.2f} histogram {}'.format(k,t,k/t,k/args.n,time.time()-t0,time.time()-t1,h))
-#                    t1 = time.time()
-#            break
-#v=[]
-#for k in range(args.n):
-#    #print('k',k,'pred',np.argmax(pred[k]),pred[k,np.argmax(pred[k])],'rle',r[k])
-#    v.append([np.argmax(pred[k]),pred[k,np.argmax(pred[k])],r[k]])
-#
-#v = sorted(v, key=lambda x:x[1])
-#for k in range(args.n):
-#    print(v[k])

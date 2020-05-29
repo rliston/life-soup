@@ -31,33 +31,31 @@ print(args)
 np.set_printoptions(linewidth=250)
 np.set_printoptions(formatter={'float': '{:12.8f}'.format, 'int': '{:4d}'.format})
 
-def dnet_dense(args,x,reuse=None):
-    print('discriminator network, reuse',reuse)
-    with tf.variable_scope('d',reuse=reuse):
+if args.net.startswith('dense'):
+    x = tf.placeholder(tf.float32, [None,16,16,1],name='x') ; print(x)
+    y = tf.placeholder(tf.int32,(None),name='y') ; print(y) # [batch] label
+    with tf.variable_scope('d',reuse=None):
         d = tf.identity(x) ; print(d)
         d = tf.layers.flatten(inputs=d) ; print(d)
         for i in range(args.layers):
             d = tf.layers.dense(inputs=d, units=args.units, activation=tf.nn.selu) ; print(d)
         d = tf.layers.dense(inputs=d, units=200, activation=None) ; print(d)
-    return d
-
-def dnet_conv(args,x,reuse=None):
-    print('discriminator network, reuse',reuse)
-    with tf.variable_scope('d',reuse=reuse):
+    logits = tf.identity(d) ; print(logits)
+ 
+if args.net.startswith('conv'):
+    x = tf.placeholder(tf.float32, [None,32,32,9],name='x') ; print(x) # start with centered 16x16, run for 8 steps and input as convolutional layers
+    y = tf.placeholder(tf.int32,(None),name='y') ; print(y) # [batch] label
+    with tf.variable_scope('d',reuse=None):
         d = tf.identity(x) ; print(d)
-        for i in range(args.layers):
+        for i in range(8):
             d = tf.layers.conv2d(inputs=d, filters=args.filters, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
-        #d = tf.layers.conv2d(inputs=d, filters=1, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
+        d = tf.layers.conv2d(inputs=d, filters=4, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
         d = tf.layers.flatten(inputs=d) ; print(d)
-        d = tf.layers.dense(inputs=d, units=args.units, activation=tf.nn.selu) ; print(d)
-        d = tf.layers.dense(inputs=d, units=args.units, activation=tf.nn.selu) ; print(d)
+        for i in range(args.layers):
+            d = tf.layers.dense(inputs=d, units=args.units, activation=tf.nn.selu) ; print(d)
         d = tf.layers.dense(inputs=d, units=200, activation=None) ; print(d)
-    return d
-
-x = tf.placeholder(tf.float32, [None,16,16,1],name='x') ; print(x)
-y = tf.placeholder(tf.int32,(None),name='y') ; print(y) # [batch] label
-
-logits = locals()['dnet_'+args.net](args,x)
+    logits = tf.identity(d) ; print(logits)
+ 
 loss = tf.losses.sparse_softmax_cross_entropy(labels=y,logits=logits,weights=tf.pow(tf.cast(y,tf.float32),tf.constant(args.pow))) ; print(loss)
 pred = tf.nn.softmax(logits,name='pred') ; print(pred)
 
@@ -75,34 +73,48 @@ def stabilize(pat):
         if pat.population == pop:
             pat = pat.advance(2)
             if pat.population == pop:
-                pat = pat.advance(1)
+                pat = pat.advance(2)
                 if pat.population == pop:
                     return i*100
     return -1
 
-def search(args,q,k): # generate args.batch size batches of data and push to queue
+# TODO add         transforms = ["flip", "rot180", "identity", "transpose", "flip_x", "flip_y", "rot90", "rot270", "swap_xy", "swap_xy_flip", "rcw", "rccw"]
+def gensoup(lt,size=16,depth=1):
+    mat2pat = lambda M : lt.pattern('$'.join([''.join(['bo'[y] for y in x]) for x in M.tolist()]) + '!')
+    coords = np.array([[x,y] for x in range(size) for y in range(size)],dtype=np.int64)
+
+    d = np.zeros([size,size,depth],dtype=np.uint8) # pattern
+    o = depth-1
+    d[o:o+16,o:o+16,0] = np.random.randint(2,size=(16,16)) # layer 0 = centered random 16x16 soup
+    p = mat2pat(d[:,:,0])
+    for k in range(1,depth):
+        p = p.advance(1)
+        v = p[coords].reshape((size,size),order='F')
+        d[:,:,k] = v
+    return p,d
+
+def genbatch(args,q,k): # generate args.batch size batches of data and push to queue
     sess = lifelib.load_rules("b3s23")
-    d = np.zeros([args.batch,16,16,1],dtype=np.uint8) # pattern
+    if args.net.startswith('dense'):
+        size=16
+        depth=1
+    if args.net.startswith('conv'):
+        size=32
+        depth=9
+
+    d = np.zeros([args.batch,size,size,depth],dtype=np.uint8) # pattern
     l = np.zeros([args.batch],dtype=np.uint32) # lifespan
     while True:
         t=0 # total soups in batch
         lt = sess.lifetree(memory=100000)
         while t < args.batch:
             # generate random 16x16 soup
-            rle=''
-            for i in range(16):
-                for j in range(16):
-                    b = random.choice([0,1])
-                    d[t,i,j,0] = b
-                    rle += ['b','o'][b]
-                rle += '$'
-            rle = rle[:-1] + '!'
-            h = lt.pattern(rle)
-
-            # run soup until population is stable
-            life = stabilize(h)
+            p,x = gensoup(lt,size,depth)
+            # run pattern until population is stable
+            life = stabilize(p)
             if life<0: # didn't stabilize after 100K steps
                 continue
+            d[t] = x
             l[t] = min(199,int(np.sqrt(life))) # label = sqrt(lifespan), cap at 199^2=39601
             t+=1
         # generated a batch of (pattern,lifespan)
@@ -111,7 +123,7 @@ def search(args,q,k): # generate args.batch size batches of data and push to que
 # IPC
 q = Queue(maxsize=1000)
 for k in range(args.threads):
-    p = Process(target=search,args=(args,q,k,))
+    p = Process(target=genbatch,args=(args,q,k,))
     p.daemon = True
     p.start()
 
