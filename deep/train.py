@@ -13,10 +13,11 @@ from multiprocessing import Process, Queue
 import lifelib ; print('lifelib',lifelib.__version__)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--net', help='network arch', default='dense')
-parser.add_argument('--layers', help='number of layers', default=36, type=int)
+parser.add_argument('--net', help='network arch', default='conv')
+parser.add_argument('--clayers', help='number of convolutional layers', default=16, type=int)
+parser.add_argument('--layers', help='number of layers', default=18, type=int)
 parser.add_argument('--units', help='number of units/layer (dense)', default=3000, type=int)
-parser.add_argument('--filters', help='number of filters/layer (conv)', default=256, type=int)
+parser.add_argument('--filters', help='number of filters/layer (conv)', default=32, type=int)
 parser.add_argument('--lr', help='learning rate', default=0.000001, type=float)
 parser.add_argument('--pow', help='label weight power exponent', default=0., type=float)
 parser.add_argument('--threads', help='number of threads for generating soups', default=20, type=int)
@@ -47,9 +48,9 @@ if args.net.startswith('conv'):
     y = tf.placeholder(tf.int32,(None),name='y') ; print(y) # [batch] label
     with tf.variable_scope('d',reuse=None):
         d = tf.identity(x) ; print(d)
-        for i in range(8):
-            d = tf.layers.conv2d(inputs=d, filters=args.filters, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
-        d = tf.layers.conv2d(inputs=d, filters=4, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
+        for i in range(1,args.clayers):
+            d = tf.layers.conv2d(inputs=d, filters=args.filters*i, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
+        #d = tf.layers.conv2d(inputs=d, filters=4, kernel_size=3, strides=1,activation=tf.nn.selu, padding='valid') ; print(d)
         d = tf.layers.flatten(inputs=d) ; print(d)
         for i in range(args.layers):
             d = tf.layers.dense(inputs=d, units=args.units, activation=tf.nn.selu) ; print(d)
