@@ -8,6 +8,7 @@ import lifelib ; print('lifelib',lifelib.__version__)
 
 # parse command line
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--stab', help='stabilization step', default=6, type=int)
 #parser.add_argument('--fft', default=False, action='store_true') # output logging messages to stderr
 parser.add_argument('--model', default='default.proto')
 #parser.add_argument('--npy', help='npy data file from merge.py', default='default.npy')
@@ -52,22 +53,29 @@ def gensoup(lt,size=16,depth=1):
     d[o:o+16,o:o+16,0] = s # layer 0 = centered random 16x16 soup
     p = mat2pat(d[:,:,0])
     #rle = p.rle_string().replace('\n', ' ') # save initial soup
-    for k in range(1,depth):
-        p = p.advance(1)
+    for k in range(depth):
         v = p[coords].reshape((size,size),order='F')
         d[:,:,k] = v
+        p = p.advance(1)
     return p,d,rle
 
 def stabilize(pat):
-    for i in range(1000):
+    life=0
+    for i in range(int(100000/args.stab)):
         pop = pat.population
-        pat = pat.advance(100)
+        pat = pat.advance(args.stab)
+        life += args.stab
         if pat.population == pop:
-            pat = pat.advance(2)
+            pat = pat.advance(6)
+            life += 6
             if pat.population == pop:
-                pat = pat.advance(2)
+                pat = pat.advance(6)
+                life += 6
                 if pat.population == pop:
-                    return i*100
+                    pat = pat.advance(6)
+                    life += 6
+                    if pat.population == pop:
+                        return life
     return -1
 
 
@@ -92,5 +100,5 @@ for k in range(args.n):
     prob = pdf[pred]
 
     # (rle,pred,prob,life)
-    print('life {:6d} pred {:6d} prob {:12.8f} rle {}'.format(life,pred**2,prob,rle))
+    print('life {:6d} pred {:6d} prob {:12.8f} >1K {:12.8f} rle {}'.format(life,pred**2,prob,np.sum(pdf[32:]),rle))
     r.append((rle,life,pred,prob))
